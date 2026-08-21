@@ -1,5 +1,7 @@
 # 해외영업팀 업무 포털 + 딜러 미팅 대시보드
 
+> 🌐 **배포 페이지: [https://aebonlee.github.io/hd-project05/](https://aebonlee.github.io/hd-project05/)** · 저장소: https://github.com/aebonlee/hd-project05
+
 해외영업팀(14개 딜러 관리)의 반복 업무를 한 화면에서 처리하는 **팀 업무 통합 포털(6개 기능)** 과,
 엑셀 업로드만으로 미팅 자료가 만들어지는 **클라이언트 미팅용 딜러 대시보드**입니다.
 
