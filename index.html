@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>해외영업팀 업무 포털</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231f3a5f'/%3E%3Ctext x='16' y='22' font-size='14' font-weight='bold' fill='white' text-anchor='middle' font-family='sans-serif'%3EHD%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/style.css">
+<!-- 로컬 라이브러리(오프라인/기내 사용 대비 CDN 미사용) -->
+<script src="lib/chart.umd.min.js"></script>
+<script src="lib/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <button id="menuToggle" class="menu-toggle" aria-label="메뉴 열기">☰</button>
+  <div class="brand">
+    <span class="brand-mark">HD</span>
+    <span class="brand-text">해외영업팀 업무 포털</span>
+  </div>
+  <div class="user-box">
+    <label for="userSelect" class="sr-only">사용자 선택</label>
+    <select id="userSelect" title="데모 로그인: 사용자 선택"></select>
+    <span id="userRole" class="role-badge"></span>
+  </div>
+</header>
+
+<div class="layout">
+  <nav id="sideNav" class="side-nav" aria-label="주요 기능">
+    <a href="#/weekly"     class="nav-item" data-view="weekly"><span class="nav-ico">📝</span>주간업무 <span class="stage-tag s1">1단계</span></a>
+    <a href="#/receivable" class="nav-item" data-view="receivable"><span class="nav-ico">📁</span>경과채권 바로가기 <span class="stage-tag s1">1단계</span></a>
+    <a href="#/trips"      class="nav-item" data-view="trips"><span class="nav-ico">✈️</span>출장 일정 <span class="stage-tag s2">2단계</span></a>
+    <a href="#/meetings"   class="nav-item" data-view="meetings"><span class="nav-ico">👥</span>팀회의 일정 <span class="stage-tag s2">2단계</span></a>
+    <a href="#/fx"         class="nav-item" data-view="fx"><span class="nav-ico">💱</span>환율 공지 <span class="stage-tag s2">2단계</span></a>
+    <a href="#/sales"      class="nav-item" data-view="sales"><span class="nav-ico">📈</span>지역별 매출 추이 <span class="stage-tag s3">3단계</span></a>
+    <a href="#/dealers"    class="nav-item" data-view="dealers"><span class="nav-ico">🤝</span>딜러 대시보드 <span class="stage-tag s3">3단계</span></a>
+    <div class="nav-footer">
+      <button id="resetSeedBtn" class="btn btn-ghost btn-sm">데모 데이터 초기화</button>
+    </div>
+  </nav>
+
+  <main id="main" class="main">
+
+    <!-- ============ B-1 주간업무 (1단계) ============ -->
+    <section id="view-weekly" class="view" hidden>
+      <h1>주간업무 작성 <small class="stage s1">1단계</small></h1>
+      <p class="view-desc">매주 메일 공지를 대체합니다. 작성 후 [알림 발송]으로 팀에 공유하세요.</p>
+
+      <div class="grid-2">
+        <div class="card">
+          <h2 id="weeklyFormTitle">주간업무 작성</h2>
+          <form id="weeklyForm" class="form">
+            <input type="hidden" id="wfId">
+            <div class="form-row">
+              <label>주차 <input type="week" id="wfWeek" required></label>
+              <label>지역/법인
+                <select id="wfRegion" required>
+                  <option value="유럽법인">유럽법인</option>
+                  <option value="미주법인">미주법인</option>
+                  <option value="아시아법인">아시아법인</option>
+                  <option value="직수출">직수출</option>
+                </select>
+              </label>
+            </div>
+            <label>주요 업무 <textarea id="wfTasks" rows="2" required placeholder="이번 주 진행한 주요 업무"></textarea></label>
+            <div class="form-row">
+              <label>주간 매출 (USD 천불) <input type="number" id="wfSales" min="0" step="1" required></label>
+              <label>작성자 <input type="text" id="wfAuthor" disabled></label>
+            </div>
+            <label>이슈 <textarea id="wfIssues" rows="2" placeholder="공유할 이슈 (없으면 비워두기)"></textarea></label>
+            <label>다음주 계획 <textarea id="wfNext" rows="2" required></textarea></label>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary" id="wfSubmitBtn">저장</button>
+              <button type="button" class="btn btn-ghost" id="wfCancelBtn" hidden>수정 취소</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="card">
+          <h2>알림 발송</h2>
+          <p class="hint">선택한 주차의 주간업무를 수신자에게 공지합니다. (데모: 발송 로그 기록 + 메일 초안 생성 / 실제 자동 발송은 README의 Apps Script 연동 참고)</p>
+          <div class="form-row">
+            <label>발송 주차 <input type="week" id="notifyWeek"></label>
+            <button type="button" class="btn btn-primary" id="notifySendBtn">알림 발송</button>
+          </div>
+          <h3>수신자 목록</h3>
+          <ul id="recipientList" class="chip-list"></ul>
+          <div class="form-row">
+            <input type="email" id="recipientInput" placeholder="추가할 이메일 주소">
+            <button type="button" class="btn btn-ghost" id="recipientAddBtn">추가</button>
+          </div>
+          <h3>발송 로그</h3>
+          <div class="table-wrap"><table id="notifyLogTable" class="table">
+            <thead><tr><th>발송일시</th><th>주차</th><th>발송자</th><th>수신자 수</th><th>메일</th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>주간업무 목록</h2>
+          <div class="filters">
+            <select id="weeklyFilterWeek"><option value="">전체 주차</option></select>
+            <select id="weeklyFilterAuthor"><option value="">전체 작성자</option></select>
+          </div>
+        </div>
+        <div class="table-wrap"><table id="weeklyTable" class="table">
+          <thead><tr><th>주차</th><th>지역/법인</th><th>작성자</th><th>주요 업무</th><th>주간 매출</th><th>이슈</th><th>다음주 계획</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <!-- ============ B-2 경과채권 바로가기 (1단계) ============ -->
+    <section id="view-receivable" class="view" hidden>
+      <h1>경과채권 바로가기 <small class="stage s1">1단계</small></h1>
+      <p class="view-desc">'Efam' 공유 폴더를 뒤지지 않고 한 번에 이동합니다. URL은 새 탭으로 열리고, 사내 서버 경로(\\efam\…)는 [경로 복사] 후 탐색기 주소창에 붙여넣으세요.</p>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>링크 목록</h2>
+          <button class="btn btn-primary btn-sm" id="rlAddBtn">+ 링크 등록</button>
+        </div>
+        <div class="table-wrap"><table id="rlTable" class="table">
+          <thead><tr><th>법인/딜러</th><th>파일명</th><th>경로</th><th>갱신일</th><th>바로가기</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+
+      <div class="card" id="rlFormCard" hidden>
+        <h2 id="rlFormTitle">링크 등록</h2>
+        <form id="rlForm" class="form">
+          <input type="hidden" id="rlId">
+          <div class="form-row">
+            <label>법인/딜러 <input type="text" id="rlTarget" required placeholder="예: 유럽법인, DL12 걸프스타"></label>
+            <label>파일명 <input type="text" id="rlFileName" required placeholder="예: 경과채권_유럽_2026-08.xlsx"></label>
+          </div>
+          <label>경로 (URL 또는 \\서버\폴더 형태)
+            <input type="text" id="rlPath" required placeholder="https://… 또는 \\efam\해외영업\경과채권\…">
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">저장</button>
+            <button type="button" class="btn btn-ghost" id="rlCancelBtn">취소</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- ============ B-5 출장 일정 (2단계) ============ -->
+    <section id="view-trips" class="view" hidden>
+      <h1>출장 일정 <small class="stage s2">2단계</small></h1>
+      <p class="view-desc">팀원별 색상으로 출장 일정을 한눈에 봅니다. 팀회의 일정(회색 테두리)도 같은 캘린더에 표시됩니다.</p>
+
+      <div class="card">
+        <div class="cal-head">
+          <button class="btn btn-ghost" id="calPrevBtn">◀</button>
+          <h2 id="calTitle">2026년 8월</h2>
+          <button class="btn btn-ghost" id="calNextBtn">▶</button>
+          <button class="btn btn-ghost btn-sm" id="calTodayBtn">오늘</button>
+        </div>
+        <div id="calLegend" class="legend"></div>
+        <div id="calendar" class="calendar"></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h2 id="tripFormTitle">출장 등록</h2>
+          <form id="tripForm" class="form">
+            <input type="hidden" id="tfId">
+            <div class="form-row">
+              <label>팀원 <select id="tfMember" required></select></label>
+              <label>국가/도시 <input type="text" id="tfCity" required placeholder="예: 독일 프랑크푸르트"></label>
+            </div>
+            <div class="form-row">
+              <label>시작일 <input type="date" id="tfStart" required></label>
+              <label>종료일 <input type="date" id="tfEnd" required></label>
+            </div>
+            <div class="form-row">
+              <label>목적 <input type="text" id="tfPurpose" required></label>
+              <label>방문 딜러 <input type="text" id="tfDealers" placeholder="예: DL01, DL02"></label>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">저장</button>
+              <button type="button" class="btn btn-ghost" id="tfCancelBtn" hidden>수정 취소</button>
+            </div>
+          </form>
+        </div>
+        <div class="card">
+          <h2>출장 목록</h2>
+          <div class="table-wrap"><table id="tripTable" class="table">
+            <thead><tr><th>팀원</th><th>국가/도시</th><th>기간</th><th>목적</th><th>방문 딜러</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ B-6 팀회의 일정 (2단계) ============ -->
+    <section id="view-meetings" class="view" hidden>
+      <h1>팀회의 일정 <small class="stage s2">2단계</small></h1>
+      <p class="view-desc">회의 일정을 등록하면 전 팀원이 조회할 수 있고, 출장 캘린더에도 함께 표시됩니다.</p>
+
+      <div class="grid-2">
+        <div class="card">
+          <h2 id="mtFormTitle">회의 등록</h2>
+          <form id="meetingForm" class="form">
+            <input type="hidden" id="mfId">
+            <div class="form-row">
+              <label>일시 <input type="datetime-local" id="mfWhen" required></label>
+              <label>장소/링크 <input type="text" id="mfPlace" required placeholder="회의실 또는 화상회의 링크"></label>
+            </div>
+            <label>안건 <textarea id="mfAgenda" rows="2" required></textarea></label>
+            <label>참석자 <input type="text" id="mfAttendees" required placeholder="예: 전원 / 최율아, 김도현"></label>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">저장</button>
+              <button type="button" class="btn btn-ghost" id="mfCancelBtn" hidden>수정 취소</button>
+            </div>
+          </form>
+        </div>
+        <div class="card">
+          <h2>다가오는 회의</h2>
+          <ul id="upcomingMeetings" class="meeting-list"></ul>
+          <h2>지난 회의</h2>
+          <ul id="pastMeetings" class="meeting-list past"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ B-4 환율 공지 (2단계) ============ -->
+    <section id="view-fx" class="view" hidden>
+      <h1>환율 공지 <small class="stage s2">2단계</small></h1>
+      <p class="view-desc">담당자가 메일 대신 화면에서 직접 입력하면 전 팀원이 바로 조회합니다.</p>
+
+      <div class="grid-2">
+        <div class="card">
+          <h2>환율 입력/수정</h2>
+          <form id="fxForm" class="form">
+            <div class="form-row">
+              <label>기준월 <input type="month" id="fxMonth" required></label>
+              <label>통화
+                <select id="fxCurrency">
+                  <option>USD</option><option>EUR</option><option>JPY</option><option>CNY</option><option>GBP</option>
+                </select>
+              </label>
+              <label>환율 (KRW) <input type="text" id="fxRate" required placeholder="예: 1,385.50"></label>
+            </div>
+            <p class="hint">같은 기준월·통화를 다시 입력하면 수정(덮어쓰기)됩니다. 입력자·입력일이 자동 기록됩니다.</p>
+            <div class="form-actions"><button type="submit" class="btn btn-primary">저장</button></div>
+          </form>
+          <h3 id="fxCurrentTitle">이번 달 고시 환율</h3>
+          <div class="table-wrap"><table id="fxCurrentTable" class="table">
+            <thead><tr><th>통화</th><th>환율(KRW)</th><th>입력자</th><th>입력일</th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+        </div>
+        <div class="card">
+          <h2>최근 12개월 변화</h2>
+          <div class="table-wrap"><table id="fxHistoryTable" class="table small">
+            <thead></thead><tbody></tbody>
+          </table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ B-3 지역별 매출 추이 (3단계) ============ -->
+    <section id="view-sales" class="view" hidden>
+      <h1>지역별 매출 추이 <small class="stage s3">3단계</small></h1>
+      <p class="view-desc">주간업무에 입력된 주간 매출이 지역/법인별로 자동 집계됩니다. (단위: USD 천불)</p>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>매출 그래프</h2>
+          <div class="filters">
+            <div class="seg" role="group" aria-label="집계 단위">
+              <button class="seg-btn active" id="salesWeekBtn">주간</button>
+              <button class="seg-btn" id="salesMonthBtn">월간</button>
+            </div>
+            <div class="seg" role="group" aria-label="차트 형태">
+              <button class="seg-btn active" id="salesLineBtn">라인</button>
+              <button class="seg-btn" id="salesBarBtn">막대</button>
+            </div>
+          </div>
+        </div>
+        <div id="salesRegionFilter" class="chip-filter"></div>
+        <div class="chart-box"><canvas id="salesChart"></canvas></div>
+      </div>
+
+      <div class="card">
+        <h2>집계 표</h2>
+        <div class="table-wrap"><table id="salesTable" class="table small"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- ============ A. 딜러 대시보드 (3단계) ============ -->
+    <section id="view-dealers" class="view" hidden>
+      <h1>딜러 미팅 대시보드 <small class="stage s3">3단계</small></h1>
+      <p class="view-desc">엑셀 양식 업로드만으로 딜러별 미팅 자료가 갱신됩니다. 출장 전 [오프라인용 HTML 내보내기]로 기내에서도 열람하세요.</p>
+
+      <div class="card">
+        <div class="card-head wrap">
+          <h2>데이터 관리</h2>
+          <div class="filters">
+            <a class="btn btn-ghost btn-sm" href="templates/딜러실적_양식.xlsx" download>엑셀 양식 내려받기</a>
+            <label class="btn btn-primary btn-sm file-btn">엑셀 업로드
+              <input type="file" id="dealerUpload" accept=".xlsx,.xls" hidden>
+            </label>
+            <button class="btn btn-ghost btn-sm" id="exportOfflineBtn">오프라인용 HTML 내보내기</button>
+          </div>
+        </div>
+        <p id="uploadStatus" class="hint"></p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>딜러 선택</h2>
+          <select id="dealerSelect"></select>
+        </div>
+        <div id="dealerCards" class="kpi-grid"></div>
+        <div id="dealerTerms" class="terms-box"></div>
+        <h3 id="dealerChartTitle">12개월 히스토리 추이</h3>
+        <div class="chart-box"><canvas id="dealerChart"></canvas></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="js/seed.js"></script>
+<script src="js/logic.js"></script>
+<script src="js/store.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
