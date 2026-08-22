@@ -157,4 +157,43 @@ ok('fmt 천단위 콤마', () => {
   assert.strictEqual(L.fmt(null), '-');
 });
 
+console.log('[전체 백업 내보내기/가져오기 (store.js)]');
+const { Store } = require('../js/store.js');
+
+/** 테스트용 인메모리 어댑터 (localStorage 대체) */
+function memoryAdapter() {
+  const db = {};
+  return {
+    name: 'memory',
+    list: (c) => (db[c] || []).slice(),
+    save: (c, r) => { (db[c] = db[c] || []).push(r); return r; },
+    remove: (c, id) => { db[c] = (db[c] || []).filter((r) => r.id !== id); },
+    replaceAll: (c, list) => { db[c] = list.slice(); },
+  };
+}
+
+ok('exportAll → importAll 왕복 시 데이터 동일', () => {
+  Store.use(memoryAdapter());
+  Store.replaceAll('users', [{ id: 'u1', name: '최율아', role: '책임자' }]);
+  Store.replaceAll('trips', [{ id: 't1', memberId: 'u1', city: '함부르크' }]);
+  const backup = JSON.parse(JSON.stringify(Store.exportAll())); // 파일 저장/로드 왕복 흉내
+  assert.strictEqual(backup.app, 'hd-portal');
+  assert.strictEqual(backup.version, 1);
+  Store.collections().forEach((c) => assert.ok(Array.isArray(backup.collections[c]), c));
+  // 빈 저장소(새 브라우저)로 교체 후 복원
+  Store.use(memoryAdapter());
+  const r = Store.importAll(backup);
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.counts.users, 1);
+  assert.deepStrictEqual(Store.list('users'), [{ id: 'u1', name: '최율아', role: '책임자' }]);
+  assert.deepStrictEqual(Store.list('trips'), [{ id: 't1', memberId: 'u1', city: '함부르크' }]);
+  assert.deepStrictEqual(Store.list('meetings'), []);
+});
+ok('validateBackup: 형식/버전 오류 거부', () => {
+  assert.strictEqual(Store.validateBackup(null).ok, false);
+  assert.strictEqual(Store.validateBackup({ app: 'other', version: 1 }).ok, false);
+  assert.strictEqual(Store.validateBackup({ app: 'hd-portal', version: 99, collections: {} }).ok, false);
+  assert.strictEqual(Store.importAll({ app: 'hd-portal', version: 1, collections: { users: '배열아님' } }).ok, false);
+});
+
 console.log('\n총 ' + count + '개 테스트 통과');

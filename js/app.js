@@ -1112,6 +1112,41 @@
       }
     });
 
+    // 전체 데이터 백업(JSON 내보내기/가져오기) — 팀원 간 파일 공유·PC 이동용
+    $('#exportJsonBtn').addEventListener('click', function () {
+      var json = JSON.stringify(S.exportAll(), null, 2);
+      var blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+      var url = URL.createObjectURL(blob);
+      var a = el('a', { href: url, download: '해외영업포털_백업_' + todayStr() + '.json' });
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
+      toast('전체 데이터를 JSON 파일로 내려받았습니다.');
+    });
+    $('#importJsonBtn').addEventListener('click', function () { $('#importJsonFile').click(); });
+    $('#importJsonFile').addEventListener('change', function (e) {
+      var file = e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        var data;
+        try { data = JSON.parse(reader.result); }
+        catch (err) { toast('JSON 파일을 읽을 수 없습니다.'); return; }
+        var v = S.validateBackup(data);
+        if (!v.ok) { toast('가져오기 실패: ' + v.error); return; }
+        var when = data.exportedAt ? data.exportedAt.slice(0, 16).replace('T', ' ') : '?';
+        if (!confirm('백업 파일(' + when + ' 내보냄)로 현재 데이터를 전부 교체할까요?')) return;
+        var r = S.importAll(data);
+        if (!r.ok) { toast('가져오기 실패: ' + r.error); return; }
+        initUserSelect();
+        showView(currentView());
+        toast('백업 데이터를 가져왔습니다.');
+      };
+      reader.readAsText(file, 'utf-8');
+    });
+
     initWeekly();
     initReceivable();
     initCalendar();

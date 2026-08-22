@@ -35,6 +35,9 @@
     <a href="#/sales"      class="nav-item" data-view="sales"><span class="nav-ico">📈</span>지역별 매출 추이 <span class="stage-tag s3">3단계</span></a>
     <a href="#/dealers"    class="nav-item" data-view="dealers"><span class="nav-ico">🤝</span>딜러 대시보드 <span class="stage-tag s3">3단계</span></a>
     <div class="nav-footer">
+      <button id="exportJsonBtn" class="btn btn-ghost btn-sm">데이터 내보내기 (JSON)</button>
+      <button id="importJsonBtn" class="btn btn-ghost btn-sm">데이터 가져오기 (JSON)</button>
+      <input type="file" id="importJsonFile" accept=".json,application/json" hidden>
       <button id="resetSeedBtn" class="btn btn-ghost btn-sm">데모 데이터 초기화</button>
     </div>
   </nav>
