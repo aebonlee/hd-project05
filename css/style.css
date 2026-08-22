@@ -81,6 +81,7 @@ body {
 .stage-tag.s2 { background: var(--s2); }
 .stage-tag.s3 { background: var(--s3); }
 .nav-footer { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); }
+.nav-footer .btn { display: block; width: 100%; margin-bottom: 6px; }
 
 .main { padding: 14px; max-width: 1200px; margin: 0 auto; }
 

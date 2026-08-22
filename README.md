@@ -6,8 +6,8 @@
 엑셀 업로드만으로 미팅 자료가 만들어지는 **클라이언트 미팅용 딜러 대시보드**입니다.
 
 - 기획: 최율아 (해외영업팀) — 생성형 AI 업무자동화 전문가과정 프로젝트
-- 형태: 빌드 과정 없는 단일 페이지 웹앱 (`index.html`) — GitHub Pages 바로 배포 가능
-- 데이터: 브라우저 localStorage (데모용) — 데이터 계층(`js/store.js`)이 분리되어 있어 구글 스프레드시트/Supabase로 교체 가능
+- 형태: 빌드 과정 없는 정적 웹앱 — 진입점 `index.html` + `js/`·`css/`·`lib/` 여러 파일 구성 (프레임워크·번들러 없음, GitHub Pages 바로 배포 가능)
+- 데이터: 브라우저 localStorage (데모용) — **브라우저(PC)별로 따로 저장되므로 그 자체로는 팀 공유가 안 됩니다.** 팀 공유는 JSON 백업 파일 교환(아래 "전체 데이터 백업") 또는 "팀 공유 저장소로 전환하기" 참고. 데이터 계층(`js/store.js`)이 분리되어 있어 구글 스프레드시트/Supabase로 교체 가능
 - 반응형: 출장 중 모바일(390px) 접속 기준으로 설계, 데스크톱은 사이드 내비게이션
 - 오프라인: 차트/엑셀 라이브러리를 `lib/`에 로컬 포함(CDN 미사용) + 딜러 대시보드 오프라인 HTML 내보내기
 
@@ -22,6 +22,14 @@ python3 -m http.server 8000
 ```
 
 처음 접속하면 샘플 시드 데이터가 자동 주입됩니다. 좌측 메뉴 하단 **[데모 데이터 초기화]** 로 언제든 시드 상태로 되돌릴 수 있습니다.
+
+## 전체 데이터 백업 (JSON 내보내기/가져오기)
+
+localStorage는 브라우저별 저장이므로, 팀원 간 데이터 공유·PC 이동·백업은 좌측 메뉴 하단의 두 버튼을 사용합니다.
+
+- **[데이터 내보내기 (JSON)]**: 포털의 **모든 컬렉션**(사용자·주간업무·경과채권 링크·환율·출장·회의·딜러·딜러실적·알림 수신자·발송 로그)을 담은 백업 파일 `해외영업포털_백업_YYYY-MM-DD.json` 을 내려받습니다.
+- **[데이터 가져오기 (JSON)]**: 백업 파일을 선택하면 형식/버전 검증 후 **확인을 거쳐 현재 데이터를 전부 교체**합니다. 다른 포털의 파일이나 손상된 파일은 거부됩니다.
+- 팀 공유 예: 담당자가 데이터를 갱신 → 내보내기 → 파일을 팀즈/메일로 공유 → 각자 가져오기. (동시 편집 병합은 지원하지 않으므로, 갱신 담당자를 한 명으로 정하는 것을 권장합니다. 실시간 공유가 필요하면 아래 "팀 공유 저장소로 전환하기" 참고.)
 
 ## 데모 계정 (사용자 선택 로그인)
 
@@ -101,10 +109,10 @@ python3 -m http.server 8000
 ## 프로젝트 구조
 
 ```
-index.html          단일 페이지 앱 (7개 뷰: 포털 6기능 + 딜러 대시보드)
+index.html          진입점 HTML (7개 뷰: 포털 6기능 + 딜러 대시보드)
 css/style.css       모바일 우선 반응형 스타일
 js/logic.js         순수 로직(주차 계산·매출 집계·환율 검증·권한·엑셀 행 검증) — Node 테스트 가능
-js/store.js         데이터 접근 계층(localStorage 어댑터, 교체 지점)
+js/store.js         데이터 접근 계층(localStorage 어댑터, 교체 지점, 전체 백업 내보내기/가져오기)
 js/seed.js          샘플 시드 데이터 (make_samples.py 생성)
 js/app.js           화면 로직
 lib/                Chart.js, SheetJS 로컬 사본 (CDN 미사용 → 오프라인 동작)
@@ -112,6 +120,38 @@ templates/          딜러실적 엑셀 양식/샘플
 test/logic.test.js  순수 로직 테스트 (node test/logic.test.js)
 make_samples.py     시드/엑셀 생성 스크립트
 ```
+
+## 알려진 제약 (데모 범위 — 의도된 한계)
+
+개인 노트북 환경에서 사내 시스템 연동 없이 완결되도록, 아래 세 가지는 의도적으로 단순화되어 있습니다. 각 항목의 실제 연동 전환점은 아래 가이드에 있습니다.
+
+| 항목 | 현재(데모) 동작 | 실제 연동 시 교체 지점 |
+|---|---|---|
+| 저장소 | 브라우저 localStorage (브라우저별 개별 저장, 실시간 팀 공유 불가) — 파일 기반 공유는 위 "전체 데이터 백업" | "팀 공유 저장소로 전환하기" (바로 아래) |
+| 주간업무 자동 알림 | 실제 서버 발송이 아니라 **발송 로그 기록 + mailto: 메일 초안 열기** | "실제 연동 가이드 > 2) 주간업무 자동 메일" — `app.js`의 `sendNotification()`에서 mailto 대신 Apps Script 웹앱 `fetch` 호출 |
+| 경과채권 바로가기 | 실제 파일 연동이 아니라 **링크 북마크 목록**(URL은 새 탭, UNC 경로는 복사만 — 브라우저 보안상 사내 폴더 직접 열기 불가) | "실제 연동 가이드 > 3) Efam 폴더 경로 등록법" — 클라우드 전환 시 공유 링크 등록으로 바로 열람 |
+
+## 팀 공유 저장소로 전환하기
+
+화면 코드(`js/app.js`)는 데이터를 **전부 `Store` 인터페이스로만** 읽고 씁니다. 따라서 `js/store.js`의 어댑터 하나만 교체하면 전 기능이 공유 저장소로 전환됩니다.
+
+**재구현할 함수는 4개뿐입니다** (어댑터 인터페이스, `js/store.js`의 `LocalStorageAdapter` 참고):
+
+| 함수 | 역할 | Supabase 매핑 예 | Google Sheets(Apps Script) 매핑 예 |
+|---|---|---|---|
+| `list(collection)` | 컬렉션 전체 조회 | `supabase.from(collection).select('*')` | `GET 웹앱URL?collection=…` |
+| `save(collection, record)` | 신규/수정 (id 기준 upsert) | `.upsert(record)` | `POST {op:'save', collection, record}` |
+| `remove(collection, id)` | 삭제 | `.delete().eq('id', id)` | `POST {op:'remove', collection, id}` |
+| `replaceAll(collection, list)` | 전체 교체 (엑셀 병합 반영 등) | `.delete().neq('id','')` 후 `.insert(list)` (또는 RPC) | `POST {op:'replaceAll', collection, list}` |
+
+전환 절차:
+
+1. 컬렉션 10개를 테이블/시트로 생성 — 목록은 `Store.collections()` 반환값과 동일: `users`, `weeklyReports`, `receivableLinks`, `exchangeRates`, `trips`, `meetings`, `dealers`, `dealerMetrics`, `notifyRecipients`, `notifyLog`.
+2. 위 4개 함수를 구현한 어댑터 객체를 만들고 (`js/store.js`에 `GoogleSheetsAdapter` 골격 동봉), `index.html` 초기화 직전에 `Store.use(어댑터)` 한 줄로 교체합니다.
+3. 기존 localStorage 데이터 이관은 **[데이터 내보내기 (JSON)]** 로 백업 후, 어댑터 교체 상태에서 **[데이터 가져오기 (JSON)]** 를 실행하면 됩니다 (`Store.importAll`이 교체된 어댑터의 `replaceAll`로 기록).
+4. Apps Script 웹앱 작성·배포의 구체 코드는 아래 "실제 연동 가이드 > 1) 구글 스프레드시트로 데이터 교체" 참고.
+
+주의: 비동기 저장소(fetch)로 바꾸는 경우 `list/save/remove/replaceAll`이 Promise를 반환하게 되므로, 간단하게는 시작 시 전체 로드 후 메모리 캐시에 두고 쓰기만 전송하는 방식(캐시 어댑터)을 권장합니다.
 
 ## 실제 연동 가이드
 
@@ -179,7 +219,7 @@ function sendWeeklyMail(recipients, subject, body) {
 ## 테스트
 
 ```bash
-# 순수 로직 테스트 (주차 계산 / 매출 집계 / 환율 검증 / 권한 / 엑셀 행 검증·병합)
+# 순수 로직 테스트 (주차 계산 / 매출 집계 / 환율 검증 / 권한 / 엑셀 행 검증·병합 / 백업 내보내기·가져오기 왕복)
 node test/logic.test.js
 
 # 문법 검사

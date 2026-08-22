@@ -18,6 +18,15 @@
   var PREFIX = 'hdportal:';
   var SEED_FLAG = PREFIX + 'seeded:v1';
 
+  /** 전체 컬렉션 목록 — 백업(내보내기/가져오기)·시트 생성 기준 */
+  var COLLECTIONS = [
+    'users', 'weeklyReports', 'receivableLinks', 'exchangeRates',
+    'trips', 'meetings', 'dealers', 'dealerMetrics', 'notifyRecipients', 'notifyLog'
+  ];
+
+  /** 백업 파일 형식 버전 (형식이 바뀌면 올린다) */
+  var BACKUP_VERSION = 1;
+
   /* ---------------- LocalStorage 어댑터 (기본) ---------------- */
   var LocalStorageAdapter = {
     name: 'localStorage',
@@ -109,6 +118,48 @@
       return null;
     },
 
+    /* ------- 전체 백업 (JSON 내보내기/가져오기 — 팀원 간 파일 공유·PC 이동용) ------- */
+
+    /** 전체 컬렉션 이름 배열 (복사본) */
+    collections: function () { return COLLECTIONS.slice(); },
+
+    /** 모든 컬렉션 → 백업 객체 (JSON.stringify 대상) */
+    exportAll: function () {
+      var out = { app: 'hd-portal', version: BACKUP_VERSION, exportedAt: new Date().toISOString(), collections: {} };
+      COLLECTIONS.forEach(function (c) { out.collections[c] = adapter.list(c); });
+      return out;
+    },
+
+    /** 백업 객체 형식/버전 검증. { ok, error? } */
+    validateBackup: function (data) {
+      if (!data || typeof data !== 'object') return { ok: false, error: '백업 파일 형식이 아닙니다.' };
+      if (data.app !== 'hd-portal') return { ok: false, error: '이 포털의 백업 파일이 아닙니다.' };
+      if (data.version !== BACKUP_VERSION) return { ok: false, error: '지원하지 않는 백업 버전입니다: ' + data.version };
+      if (!data.collections || typeof data.collections !== 'object') return { ok: false, error: '컬렉션 데이터가 없습니다.' };
+      for (var i = 0; i < COLLECTIONS.length; i++) {
+        if (!Array.isArray(data.collections[COLLECTIONS[i]])) {
+          return { ok: false, error: '컬렉션 누락 또는 형식 오류: ' + COLLECTIONS[i] };
+        }
+      }
+      return { ok: true };
+    },
+
+    /** 백업 객체로 모든 컬렉션 교체(복원). { ok, error?, counts? } */
+    importAll: function (data) {
+      var v = this.validateBackup(data);
+      if (!v.ok) return v;
+      var counts = {};
+      COLLECTIONS.forEach(function (c) {
+        adapter.replaceAll(c, data.collections[c]);
+        counts[c] = data.collections[c].length;
+      });
+      // 복원 후 시드가 덮어쓰지 않도록 시드 플래그 기록 (브라우저 환경에서만)
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(SEED_FLAG, 'imported:' + new Date().toISOString());
+      }
+      return { ok: true, counts: counts };
+    },
+
     /* ------- 로그인(데모: 사용자 선택) ------- */
     currentUser: function () {
       var id = localStorage.getItem(PREFIX + 'currentUserId');
@@ -143,4 +194,8 @@
 
   root.Store = Store;
   root.GoogleSheetsAdapter = GoogleSheetsAdapter;
+  // Node 테스트용 (test/logic.test.js에서 백업 왕복 테스트)
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { Store: Store, GoogleSheetsAdapter: GoogleSheetsAdapter };
+  }
 })(typeof self !== 'undefined' ? self : this);
