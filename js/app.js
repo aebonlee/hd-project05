@@ -1159,5 +1159,41 @@
     showView(currentView());
   }
 
-  document.addEventListener('DOMContentLoaded', init);
+  /**
+   * 시작 — 저장 위치를 먼저 정하고 화면을 띄운다.
+   *
+   * 서버에 연결되면 Store 의 어댑터를 팀 공용으로 갈아 끼운다.
+   * 화면 코드(init 아래 전부)는 어디에 저장되는지 모른 채 그대로 돈다.
+   * 연결이 안 되면 지금까지처럼 이 브라우저에 저장한다.
+   */
+  function boot() {
+    if (window.HDDoc) {
+      HDDoc.onNotify(function (msg, isError) { toast(msg, isError); });
+    }
+
+    if (window.HDDoc && HDDoc.available() && window.SupabaseDocAdapter) {
+      // 서버에 아직 문서가 없으면 지금 이 브라우저에 있는 것을 씨앗으로 올린다.
+      var seed = {};
+      S.collections().forEach(function (c) { seed[c] = S.list(c); });
+
+      HDDoc.boot({
+        id: 'hd-portal',
+        initial: seed,
+        onReady: function (doc) {
+          S.use(window.SupabaseDocAdapter(doc));
+          init();
+        },
+        onFallback: function () {
+          // 연결 실패 — 브라우저 저장 그대로. 배너에 이유가 뜬다.
+          init();
+        }
+      });
+      return;
+    }
+
+    if (window.HDDoc) HDDoc.banner('demo');
+    init();
+  }
+
+  document.addEventListener('DOMContentLoaded', boot);
 })();
