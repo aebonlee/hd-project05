@@ -32,10 +32,12 @@
   --hd-ink-3:  #64748b;   /* 4.76:1 */
 
   /* 강조 — 프로젝트마다 이 두 줄만 바꾸면 색이 바뀐다 */
-  /* hd-project05 */
-  --accent:      #6b3fa0;
-  --accent-deep: #512f79;
-  --accent-soft: #f0eaf8;
+  /* hd-project05 — 이 포털이 원래 쓰던 남색·파랑 계열.
+     내가 임의로 보라를 얹었더니 헤더만 보라고 사이드바·배지는 남색이라 색이 갈렸다.
+     프로젝트가 이미 가진 색을 강조색으로 삼는 것이 맞다. */
+  --accent:      #2f6fb7;
+  --accent-deep: #1f3a5f;
+  --accent-soft: #eaf0f8;
   --on-accent:   #ffffff;
 
   /* 상태 */
@@ -757,3 +759,20 @@ body.hd.hd-app > header .kpi:hover {
   border-color: rgba(255, 255, 255, .45);
   background: rgba(255, 255, 255, .18);
 }
+
+/* 프로젝트가 쓰던 자체 변수도 같은 계열로 묶는다.
+   이걸 안 하면 헤더는 테마 색인데 본문 강조는 옛 색이라 두 색이 따로 논다. */
+:root {
+  --navy:      #1f3a5f;
+  --navy-dark: #16293f;
+  --accent:    #2f6fb7;
+}
+/* 글자에 쓰는 파랑은 한 단계 진하게 — #2f6fb7 은 흰 바탕에서 5.15:1 이라
+   작은 글씨에는 아슬아슬하다. 면(버튼 배경)에는 그대로 쓴다. */
+.hd.hd-app a:not([class]),
+.hd.hd-app .link,
+.hd.hd-app .tab.active { color: #24578f; }
+
+/* 단계 배지(1·2·3단계)는 일부러 다른 색이다 — 브랜드 색과 헷갈리지 않게
+   테두리를 줘서 '상태 표시'임을 드러낸다. */
+.hd.hd-app .stage-tag { border: 1px solid rgba(0,0,0,.12); }
