@@ -895,3 +895,22 @@ body.hd.hd-app > header .kpi:hover {
 /* 단계 배지(1·2·3단계)는 일부러 다른 색이다 — 브랜드 색과 헷갈리지 않게
    테두리를 줘서 '상태 표시'임을 드러낸다. */
 .hd.hd-app .stage-tag { border: 1px solid rgba(0,0,0,.12); }
+
+/* ── 왼쪽 메뉴가 상단을 덮지 않게 ─────────────────────────────────────────
+   `.side-nav` 는 `position: fixed; top: 52px` 로 **헤더 높이를 숫자로 박아** 두었다.
+   그 위에 연결 상태 띠가 하나 끼어들고, 테마가 헤더 여백을 늘리면서
+   52px 이 실제 헤더 아래가 아니게 되어 메뉴가 헤더를 덮었다.
+
+   --hd-chrome-h 는 띠와 헤더의 **실제 높이를 잰 값**이다(hd-docsync.js 가 넣는다).
+   변수가 없을 때를 대비해 52px 을 기본값으로 둔다 — 스크립트가 안 돌아도 깨지지 않는다. */
+.hd.hd-app .side-nav {
+  top: var(--hd-chrome-h, 52px);
+}
+
+/* 본문도 같은 값만큼 내려야 첫 줄이 헤더에 가리지 않는다 */
+@media (min-width: 900px) {
+  .hd.hd-app .main { padding-top: var(--sp-2); }
+}
+
+/* 표 머리글도 붙박이다 — 헤더 아래에서 멈추게 한다 */
+.hd.hd-app .table th { top: 0; }
