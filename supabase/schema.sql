@@ -162,7 +162,14 @@ create trigger metrics_touch before update on public.dealer_metrics
 -- 3. 뷰
 -- ----------------------------------------------------------------------------
 
-create or replace view public.dealer_dashboard as
+
+-- ⚠ 뷰에는 `with (security_invoker = true)` 를 붙인다.
+--   붙이지 않으면 뷰는 **만든 사람(postgres)의 권한**으로 돌아, 뷰를 읽을 수 있는
+--   사람이 밑에 깔린 표의 RLS 를 통째로 지나친다. 표만 잠그고 뷰를 안 잠그면 헛일이다.
+--   (hd-project03 에서 실제로 남의 업체 실사 결과가 뷰로 그대로 보였다.
+--    tests/server.test.js 의 "업체는 보고서 뷰로도 남의 자료를 볼 수 없다" 가 잡는다)
+--   security_invoker 는 PostgreSQL 15 부터. Supabase 는 15 이상이다.
+create or replace view public.dealer_dashboard with (security_invoker = true) as
 select
   d.code, d.name, d.country, d.region, d.currency,
   m.period, m.sales, m.inventory, m.receivable, m.overdue, m.terms_summary,
@@ -175,7 +182,7 @@ from public.dealer d
 join public.dealer_metrics m on m.dealer_code = d.code
 left join public.fx_rate f on f.period = m.period and f.currency = d.currency;
 
-create or replace view public.region_summary as
+create or replace view public.region_summary with (security_invoker = true) as
 select period, coalesce(region, '(미지정)') as region,
        count(*)         as dealers,
        sum(sales)       as sales,
@@ -187,7 +194,7 @@ from public.dealer_dashboard
 group by period, coalesce(region, '(미지정)');
 
 -- 환율이 없는 딜러·기간 — 원화 환산이 조용히 비는 것을 드러낸다
-create or replace view public.missing_fx as
+create or replace view public.missing_fx with (security_invoker = true) as
 select distinct m.period, d.currency
 from public.dealer_metrics m
 join public.dealer d on d.code = m.dealer_code
