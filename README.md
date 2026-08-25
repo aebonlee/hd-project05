@@ -2,6 +2,10 @@
 
 > 🌐 **배포 페이지: [https://aebonlee.github.io/hd-project05/](https://aebonlee.github.io/hd-project05/)** · 저장소: https://github.com/aebonlee/hd-project05
 
+> 🗄️ **Supabase 를 붙이려면 → [`SUPABASE-설정.md`](SUPABASE-설정.md)**
+> 데이터베이스는 **수강생 본인 계정**에 만듭니다. 계정 만들기부터 확인까지 단계별로 적어 두었습니다.
+
+
 해외영업팀(14개 딜러 관리)의 반복 업무를 한 화면에서 처리하는 **팀 업무 통합 포털(6개 기능)** 과,
 엑셀 업로드만으로 미팅 자료가 만들어지는 **클라이언트 미팅용 딜러 대시보드**입니다.
 
