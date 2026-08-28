@@ -81,7 +81,7 @@
 
   /* ================= 네비게이션 ================= */
 
-  var VIEWS = ['weekly', 'receivable', 'trips', 'meetings', 'fx', 'sales', 'dealers'];
+  var VIEWS = ['weekly', 'receivable', 'trips', 'meetings', 'fx', 'sales', 'dealers', 'prices'];
 
   function currentView() {
     var h = (location.hash || '#/weekly').replace('#/', '');
@@ -103,17 +103,20 @@
     if (name === 'trips') { renderCalendar(); renderTripList(); }
     if (name === 'meetings') renderMeetings();
     if (name === 'fx') renderFxView();
-    if (name === 'sales') renderSales();
+    if (name === 'sales') { renderSales(); renderSapCharts(); }
     if (name === 'dealers') renderDealers();
+    if (name === 'prices') renderPrices();
   }
 
   /* ================= B-1 주간업무 ================= */
 
   var weeklyEditingId = null;
+  var weeklyMonthFilter = ''; // '' = 전체, 'YYYY-MM' = 그 달만 (월별 탭)
 
   function initWeekly() {
     $('#wfWeek').value = L.weekLabel(new Date());
     $('#notifyWeek').value = L.weekLabel(new Date());
+    initNotifyMini();
 
     $('#weeklyForm').addEventListener('submit', function (e) {
       e.preventDefault();
@@ -189,16 +192,36 @@
     fa.innerHTML = '<option value="">전체 작성자</option>';
     S.list('users').forEach(function (u) { fa.appendChild(el('option', { value: u.id, text: u.name })); });
     fw.value = fwVal; fa.value = faVal;
+    renderWeeklyMonthTabs(reports);
     renderWeeklyTable();
     renderRecipients();
     renderNotifyLog();
+  }
+
+  /** 월별 탭 — 그 달의 주간업무만 모아 본다 (슬라이드1) */
+  function renderWeeklyMonthTabs(reports) {
+    var box = $('#weeklyMonthTabs');
+    if (!box) return;
+    var months = Array.from(new Set(reports.map(function (r) { return L.weekToMonth(r.week); }).filter(Boolean))).sort().reverse();
+    if (weeklyMonthFilter && months.indexOf(weeklyMonthFilter) === -1) weeklyMonthFilter = '';
+    box.innerHTML = '';
+    box.appendChild(el('button', {
+      class: 'month-tab' + (weeklyMonthFilter === '' ? ' active' : ''), text: '전체',
+      onclick: function () { weeklyMonthFilter = ''; renderWeeklyMonthTabs(S.list('weeklyReports')); renderWeeklyTable(); }
+    }));
+    months.forEach(function (m) {
+      box.appendChild(el('button', {
+        class: 'month-tab' + (weeklyMonthFilter === m ? ' active' : ''), text: m,
+        onclick: function () { weeklyMonthFilter = m; renderWeeklyMonthTabs(S.list('weeklyReports')); renderWeeklyTable(); }
+      }));
+    });
   }
 
   function renderWeeklyTable() {
     var user = S.currentUser();
     var fw = $('#weeklyFilterWeek').value, fa = $('#weeklyFilterAuthor').value;
     var list = S.list('weeklyReports')
-      .filter(function (r) { return (!fw || r.week === fw) && (!fa || r.authorId === fa); })
+      .filter(function (r) { return (!fw || r.week === fw) && (!fa || r.authorId === fa) && (!weeklyMonthFilter || L.weekToMonth(r.week) === weeklyMonthFilter); })
       .sort(function (a, b) { return a.week < b.week ? 1 : a.week > b.week ? -1 : a.region.localeCompare(b.region); });
     var tbody = $('#weeklyTable tbody');
     tbody.innerHTML = '';
@@ -313,6 +336,32 @@
     a.remove();
   }
 
+  /** 사이드바 미니 알림 위젯 — "매주 월요일 14시 클릭 한 번" 요청(슬라이드1)을
+   *  실제 예약 발송(백엔드 없음)이 아니라, 다음 발송 시각을 보여주고 원클릭으로
+   *  이번 주차 알림을 보내는 형태로 구현했다. */
+  function nextMonday14() {
+    var now = new Date();
+    var d = new Date(now);
+    var day = d.getDay(); // 0=일 ... 1=월
+    var diff = (8 - day) % 7; // 다음 월요일까지 일수 (오늘이 월요일이면 7일 뒤 다음주)
+    if (day === 1 && now.getHours() < 14) diff = 0; // 오늘이 월요일이고 아직 14시 전이면 오늘
+    d.setDate(now.getDate() + diff);
+    d.setHours(14, 0, 0, 0);
+    return d;
+  }
+
+  function initNotifyMini() {
+    var when = nextMonday14();
+    var label = (when.getMonth() + 1) + '/' + when.getDate() + '(월) 14:00';
+    var el2 = $('#notifyMiniWhen');
+    if (el2) el2.textContent = label;
+    var btn = $('#notifyMiniBtn');
+    if (btn) btn.addEventListener('click', function () {
+      $('#notifyWeek').value = L.weekLabel(new Date());
+      sendNotification();
+    });
+  }
+
   function renderNotifyLog() {
     var tbody = $('#notifyLogTable tbody');
     tbody.innerHTML = '';
@@ -358,6 +407,118 @@
       renderReceivable();
       toast('링크를 저장했습니다.');
     });
+    $('#receivableUpload').addEventListener('change', handleReceivableUpload);
+  }
+
+  /* ---- 경과채권 엑셀 업로드 (슬라이드2) ---- */
+
+  var RECEIVABLE_HEADER_MAP = {
+    'dealer code': 'dealerCode', 'dealer_code': 'dealerCode', 'dealercode': 'dealerCode',
+    'dealer name': 'dealerName', 'dealer_name': 'dealerName', 'dealername': 'dealerName',
+    'od': 'od', '담당자': 'manager', 'manager': 'manager'
+  };
+
+  function handleReceivableUpload(e) {
+    var file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    var status = $('#receivableUploadStatus');
+    status.textContent = '"' + file.name + '" 읽는 중…';
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      try {
+        var wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        var raw = XLSX.utils.sheet_to_json(ws, { defval: '', header: 1 });
+        if (!raw.length) { status.textContent = '업로드 실패 — 빈 파일입니다.'; return; }
+        var headerRow = raw[0].map(function (h) { return String(h).trim().toLowerCase(); });
+        var known = headerRow.some(function (h) { return RECEIVABLE_HEADER_MAP[h]; });
+        var rows = [];
+        for (var i = 1; i < raw.length; i++) {
+          var line = raw[i];
+          if (!line || !line.length || line.every(function (c) { return c === ''; })) continue;
+          var rec = {};
+          if (known) {
+            headerRow.forEach(function (h, idx) {
+              var key = RECEIVABLE_HEADER_MAP[h];
+              if (key) rec[key] = line[idx];
+            });
+          } else {
+            // 헤더가 다르면 열 순서(Dealer code, Dealer Name, OD, 담당자)로 인식
+            rec = { dealerCode: line[0], dealerName: line[1], od: line[2], manager: line[3] };
+          }
+          if (!String(rec.dealerCode || '').trim()) continue;
+          var existing = S.list('receivableRows').find(function (r) { return r.dealerCode === String(rec.dealerCode).trim(); });
+          rows.push({
+            id: existing ? existing.id : undefined,
+            dealerCode: String(rec.dealerCode).trim(),
+            dealerName: String(rec.dealerName || '').trim(),
+            od: rec.od,
+            manager: String(rec.manager || '').trim(),
+            delayReason: existing ? existing.delayReason : '',
+            resolution: existing ? existing.resolution : '',
+            uploadedAt: todayStr()
+          });
+        }
+        if (!rows.length) { status.textContent = '업로드 실패 — 유효한 행이 없습니다. 열 이름(Dealer code, Dealer Name, OD, 담당자)을 확인하세요.'; return; }
+        rows.forEach(function (r) { S.save('receivableRows', r); });
+        status.textContent = rows.length + '건 반영했습니다. (' + todayStr() + ')';
+        renderReceivableRows();
+      } catch (err) {
+        status.textContent = '엑셀을 읽는 중 오류가 발생했습니다: ' + err.message;
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function renderReceivableRows() {
+    var tbody = $('#receivableRowsTable tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    var assigneeNames = (window.ASSIGNEES || []).map(function (a) { return a.name; });
+    S.list('receivableRows').forEach(function (r) {
+      var tr = el('tr');
+      tr.appendChild(el('td', { text: r.dealerCode }));
+      tr.appendChild(el('td', { class: 'wrap-cell', text: r.dealerName }));
+      tr.appendChild(el('td', { class: 'num', text: String(r.od) }));
+
+      var managerTd = el('td');
+      var managerSel = el('select');
+      managerSel.appendChild(el('option', { value: '', text: '(미지정)' }));
+      assigneeNames.forEach(function (n) { managerSel.appendChild(el('option', { value: n, text: n })); });
+      managerSel.value = assigneeNames.indexOf(r.manager) >= 0 ? r.manager : '';
+      managerSel.addEventListener('change', function () {
+        r.manager = managerSel.value;
+        S.save('receivableRows', r);
+      });
+      managerTd.appendChild(managerSel);
+      tr.appendChild(managerTd);
+
+      var reasonTd = el('td');
+      var reasonInput = el('input', { type: 'text', value: r.delayReason || '', placeholder: '지연 사유' });
+      reasonInput.addEventListener('change', function () { r.delayReason = reasonInput.value; S.save('receivableRows', r); });
+      reasonTd.appendChild(reasonInput);
+      tr.appendChild(reasonTd);
+
+      var resTd = el('td');
+      var resInput = el('input', { type: 'text', value: r.resolution || '', placeholder: '해결 방법' });
+      resInput.addEventListener('change', function () { r.resolution = resInput.value; S.save('receivableRows', r); });
+      resTd.appendChild(resInput);
+      tr.appendChild(resTd);
+
+      var act = el('td');
+      act.appendChild(el('button', {
+        class: 'link-btn danger', text: '삭제',
+        onclick: function () {
+          if (confirm(r.dealerCode + ' 행을 삭제할까요?')) { S.remove('receivableRows', r.id); renderReceivableRows(); }
+        }
+      }));
+      tr.appendChild(act);
+      tbody.appendChild(tr);
+    });
+    if (!S.list('receivableRows').length) {
+      tbody.appendChild(el('tr', {}, [el('td', { colspan: '7', text: '업로드된 경과채권이 없습니다.' })]));
+    }
   }
 
   function copyText(text) {
@@ -378,6 +539,7 @@
   }
 
   function renderReceivable() {
+    renderReceivableRows();
     var tbody = $('#rlTable tbody');
     tbody.innerHTML = '';
     S.list('receivableLinks').forEach(function (r) {
@@ -603,22 +765,103 @@
   /* ================= B-6 팀회의 ================= */
 
   var meetingEditingId = null;
+  var meetingRecognition = null; // Web Speech API 인스턴스 (지원 브라우저에서만)
 
   function initMeetings() {
     $('#meetingForm').addEventListener('submit', function (e) {
       e.preventDefault();
+      var rec = meetingEditingId ? S.get('meetings', meetingEditingId) : null;
       S.save('meetings', {
         id: meetingEditingId || undefined,
         datetime: $('#mfWhen').value,
         place: $('#mfPlace').value.trim(),
         agenda: $('#mfAgenda').value.trim(),
-        attendees: $('#mfAttendees').value.trim()
+        attendees: $('#mfAttendees').value.trim(),
+        notes: rec ? rec.notes : ''
       });
       toast(meetingEditingId ? '회의를 수정했습니다.' : '회의를 등록했습니다.');
       cancelMeetingEdit();
       renderMeetings();
     });
     $('#mfCancelBtn').addEventListener('click', cancelMeetingEdit);
+
+    // 참석자 자동완성 목록(담당자 명단)
+    var dl = $('#assigneeList');
+    if (dl) (window.ASSIGNEES || []).forEach(function (a) { dl.appendChild(el('option', { value: a.name })); });
+
+    // 클릭으로 알림발송 — 편집 중인 회의, 없으면 가장 가까운 다가오는 회의를 대상으로
+    $('#meetingNotifyBtn').addEventListener('click', function () {
+      var target = meetingEditingId ? S.get('meetings', meetingEditingId) : nearestUpcomingMeeting();
+      if (!target) { toast('알림 보낼 회의가 없습니다. 먼저 회의를 등록하세요.'); return; }
+      var recipients = String(target.attendees || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      if (!recipients.length) { toast('참석자가 비어 있습니다.'); return; }
+      var subject = '[해외영업팀] 팀회의 안내 — ' + target.datetime.replace('T', ' ');
+      var body = '일시: ' + target.datetime.replace('T', ' ') + '\n장소/링크: ' + target.place +
+        '\n안건: ' + target.agenda + '\n참석자: ' + target.attendees;
+      var mailto = L.buildMailto(recipients, subject, body);
+      var a = el('a', { href: mailto });
+      document.body.appendChild(a); a.click(); a.remove();
+      toast('회의 알림 메일 초안을 열었습니다. (참석자 ' + recipients.length + '명)');
+    });
+
+    // 회의 노트란
+    $('#meetingNoteSelect').addEventListener('change', loadMeetingNote);
+    $('#meetingNoteSaveBtn').addEventListener('click', function () {
+      var id = $('#meetingNoteSelect').value;
+      if (!id) { toast('노트를 남길 회의를 먼저 선택하세요.'); return; }
+      var mt = S.get('meetings', id);
+      if (!mt) return;
+      mt.notes = $('#meetingNoteText').value;
+      S.save('meetings', mt);
+      toast('노트를 저장했습니다.');
+    });
+
+    // 마이크 녹음 → 텍스트 전사 (Web Speech API, 브라우저 내장 — 오프라인/구형 브라우저 미지원)
+    var SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    var micBtn = $('#meetingMicBtn');
+    if (!SpeechRecognitionCtor) {
+      micBtn.disabled = true;
+      micBtn.title = '이 브라우저는 음성인식을 지원하지 않습니다 (Chrome/Edge 권장)';
+    } else {
+      micBtn.addEventListener('click', function () {
+        if (meetingRecognition) { meetingRecognition.stop(); return; }
+        meetingRecognition = new SpeechRecognitionCtor();
+        meetingRecognition.lang = 'ko-KR';
+        meetingRecognition.continuous = true;
+        meetingRecognition.interimResults = false;
+        meetingRecognition.onresult = function (ev) {
+          var chunk = '';
+          for (var i = ev.resultIndex; i < ev.results.length; i++) chunk += ev.results[i][0].transcript;
+          var ta = $('#meetingNoteText');
+          ta.value = (ta.value ? ta.value + '\n' : '') + chunk;
+        };
+        meetingRecognition.onend = function () {
+          meetingRecognition = null;
+          micBtn.textContent = '🎤 녹음 시작';
+        };
+        meetingRecognition.onerror = function () {
+          toast('음성인식 중 오류가 발생했습니다.');
+          meetingRecognition = null;
+          micBtn.textContent = '🎤 녹음 시작';
+        };
+        meetingRecognition.start();
+        micBtn.textContent = '⏹ 녹음 중지';
+      });
+    }
+  }
+
+  function nearestUpcomingMeeting() {
+    var now = new Date();
+    var nowStr = todayStr() + 'T' + pad2(now.getHours()) + ':' + pad2(now.getMinutes());
+    var upcoming = S.list('meetings').filter(function (mt) { return mt.datetime >= nowStr; })
+      .sort(function (a, b) { return a.datetime < b.datetime ? -1 : 1; });
+    return upcoming[0] || null;
+  }
+
+  function loadMeetingNote() {
+    var id = $('#meetingNoteSelect').value;
+    var mt = id ? S.get('meetings', id) : null;
+    $('#meetingNoteText').value = mt ? (mt.notes || '') : '';
   }
 
   function cancelMeetingEdit() {
@@ -666,16 +909,22 @@
     var now = new Date();
     var nowStr = todayStr() + 'T' + pad2(now.getHours()) + ':' + pad2(now.getMinutes());
     var list = S.list('meetings').slice().sort(function (a, b) { return a.datetime < b.datetime ? -1 : 1; });
-    var up = $('#upcomingMeetings'), past = $('#pastMeetings');
-    up.innerHTML = ''; past.innerHTML = '';
-    list.forEach(function (mt) {
-      if (mt.datetime >= nowStr) up.appendChild(meetingItem(mt, false));
-    });
+    var past = $('#pastMeetings');
+    past.innerHTML = '';
     list.slice().reverse().forEach(function (mt) {
       if (mt.datetime < nowStr) past.appendChild(meetingItem(mt, true));
     });
-    if (!up.children.length) up.appendChild(el('li', { text: '다가오는 회의가 없습니다.' }));
     if (!past.children.length) past.appendChild(el('li', { text: '지난 회의가 없습니다.' }));
+
+    // 회의 노트란 — 전체 회의(최신순) 선택 목록
+    var sel = $('#meetingNoteSelect');
+    var prev = sel.value;
+    sel.innerHTML = '<option value="">회의를 선택하세요</option>';
+    list.slice().reverse().forEach(function (mt) {
+      sel.appendChild(el('option', { value: mt.id, text: mt.datetime.replace('T', ' ') + ' · ' + mt.agenda }));
+    });
+    if (prev && list.some(function (m) { return m.id === prev; })) sel.value = prev;
+    loadMeetingNote();
   }
 
   /* ================= B-4 환율 ================= */
@@ -694,12 +943,14 @@
       var check = L.validateRate($('#fxRate').value);
       if (!check.ok) { toast(check.error); return; }
       var currency = $('#fxCurrency').value;
+      var category = $('#fxCategory') ? $('#fxCategory').value : '기준통화';
       var user = S.currentUser();
       var existing = S.list('exchangeRates').find(function (r) { return r.month === month && r.currency === currency; });
       S.save('exchangeRates', {
         id: existing ? existing.id : undefined,
         month: month,
         currency: currency,
+        category: category,
         rate: check.value,
         inputBy: user ? user.name : '-',
         inputAt: todayStr()
@@ -722,12 +973,13 @@
     cur.forEach(function (r) {
       var tr = el('tr');
       tr.appendChild(el('td', { text: r.currency }));
+      tr.appendChild(el('td', { text: r.category || '기준통화' }));
       tr.appendChild(el('td', { class: 'num', text: L.fmt(r.rate) }));
       tr.appendChild(el('td', { text: r.inputBy }));
       tr.appendChild(el('td', { text: r.inputAt }));
       tbody.appendChild(tr);
     });
-    if (!cur.length) tbody.appendChild(el('tr', {}, [el('td', { colspan: '4', text: month + ' 입력된 환율이 없습니다.' })]));
+    if (!cur.length) tbody.appendChild(el('tr', {}, [el('td', { colspan: '5', text: month + ' 입력된 환율이 없습니다.' })]));
 
     // 최근 12개월 매트릭스 (행=월, 열=통화)
     var months = Array.from(new Set(rates.map(function (r) { return r.month; }))).sort().slice(-12);
@@ -766,6 +1018,83 @@
     $('#salesMonthBtn').addEventListener('click', function () { salesMode = 'month'; syncSeg(); renderSales(); });
     $('#salesLineBtn').addEventListener('click', function () { salesType = 'line'; syncSeg(); renderSales(); });
     $('#salesBarBtn').addEventListener('click', function () { salesType = 'bar'; syncSeg(); renderSales(); });
+    $('#sapUpload').addEventListener('change', handleSapUpload);
+  }
+
+  /* ---- SAP 매출 업로드 — 법인/직수출 분리 (슬라이드6) ---- */
+
+  var SAP_HEADER_MAP = { '국가': 'country', '구분': 'kind', '기준월': 'month', '매출': 'sales' };
+  var sapCorpChart = null, sapExportChart = null;
+
+  function handleSapUpload(e) {
+    var file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    var status = $('#sapUploadStatus');
+    status.textContent = '"' + file.name + '" 읽는 중…';
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      try {
+        var wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        var raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
+        var rows = [], errors = [];
+        raw.forEach(function (r, i) {
+          var mapped = {};
+          Object.keys(r).forEach(function (k) {
+            var key = SAP_HEADER_MAP[String(k).trim()];
+            if (key) mapped[key] = r[k];
+          });
+          if (!mapped.country && !mapped.month) return;
+          var check = L.validateSapRow(mapped);
+          if (check.ok) rows.push(check.row);
+          else errors.push((i + 2) + '행: ' + check.error);
+        });
+        if (!rows.length) {
+          status.textContent = '업로드 실패 — 유효한 행이 없습니다. ' + (errors[0] || '열 이름(국가/구분/기준월/매출)을 확인하세요.');
+          return;
+        }
+        var existing = S.list('sapSales');
+        rows.forEach(function (r) {
+          var dup = existing.find(function (x) { return x.country === r.country && x.kind === r.kind && x.month === r.month; });
+          S.save('sapSales', { id: dup ? dup.id : undefined, country: r.country, kind: r.kind, month: r.month, sales: r.sales });
+        });
+        status.textContent = rows.length + '건 반영' + (errors.length ? ' (' + errors.length + '건 오류 건너뜀)' : '') + '.';
+        renderSapCharts();
+      } catch (err) {
+        status.textContent = '엑셀을 읽는 중 오류가 발생했습니다: ' + err.message;
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  var SAP_REGION_COLORS = { '아시아': '#b7791f', '중동': '#7048ad', '아프리카': '#c0392b', 'CIS': '#2f6fb7', '대양주': '#1e8e5a', '중남미': '#d17a22', 'CNHI': '#555', '기타': '#999' };
+
+  function renderSapCharts() {
+    var corpCanvas = $('#sapCorpChart'), exportCanvas = $('#sapExportChart');
+    if (!corpCanvas || !exportCanvas) return;
+    var agg = L.aggregateSapSales(S.list('sapSales'));
+
+    if (sapCorpChart) sapCorpChart.destroy();
+    sapCorpChart = new Chart(corpCanvas.getContext('2d'), {
+      type: 'bar',
+      data: { labels: agg.labels, datasets: [{ label: '법인 매출', data: agg.corp, backgroundColor: '#2f6fb7' }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+    });
+
+    var regions = Object.keys(agg.exportSeries);
+    if (sapExportChart) sapExportChart.destroy();
+    sapExportChart = new Chart(exportCanvas.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: agg.labels,
+        datasets: regions.map(function (r) {
+          var c = SAP_REGION_COLORS[r] || '#999';
+          return { label: r, data: agg.exportSeries[r], borderColor: c, backgroundColor: c, tension: 0.25, borderWidth: 2, pointRadius: 3 };
+        })
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true } } }
+    });
   }
 
   function syncSeg() {
@@ -1154,9 +1483,101 @@
     initFx();
     initSales();
     initDealers();
+    initPrices();
 
     window.addEventListener('hashchange', function () { showView(currentView()); });
     showView(currentView());
+  }
+
+  /* ================= 오일·브레이커 가격 (슬라이드7) ================= */
+
+  var priceCategory = 'oil'; // 'oil' | 'breaker'
+  var PRICE_HEADER_MAP = { '품목': 'itemName', '단가': 'unitPrice', '통화': 'currency', '비고': 'note' };
+
+  function initPrices() {
+    $('#priceOilBtn').addEventListener('click', function () { priceCategory = 'oil'; syncPriceSeg(); renderPrices(); });
+    $('#priceBreakerBtn').addEventListener('click', function () { priceCategory = 'breaker'; syncPriceSeg(); renderPrices(); });
+    $('#priceUpload').addEventListener('change', handlePriceUpload);
+    $('#priceTeamsSaveBtn').addEventListener('click', function () {
+      var links = S.list('teamsLinks')[0] || { id: undefined, oil: '', breaker: '' };
+      links[priceCategory] = $('#priceTeamsLink').value.trim();
+      S.save('teamsLinks', links);
+      renderPrices();
+      toast('팀즈 폴더 링크를 저장했습니다.');
+    });
+  }
+
+  function syncPriceSeg() {
+    $('#priceOilBtn').classList.toggle('active', priceCategory === 'oil');
+    $('#priceBreakerBtn').classList.toggle('active', priceCategory === 'breaker');
+    $('#priceListTitle').textContent = (priceCategory === 'oil' ? '오일' : '브레이커') + ' 가격 목록';
+  }
+
+  function handlePriceUpload(e) {
+    var file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    var status = $('#priceUploadStatus');
+    status.textContent = '"' + file.name + '" 읽는 중…';
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      try {
+        var wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        var raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
+        var rows = [];
+        raw.forEach(function (r) {
+          var mapped = { category: priceCategory };
+          Object.keys(r).forEach(function (k) {
+            var key = PRICE_HEADER_MAP[String(k).trim()];
+            if (key) mapped[key] = r[k];
+          });
+          if (!String(mapped.itemName || '').trim()) return;
+          mapped.unitPrice = Number(mapped.unitPrice) || 0;
+          mapped.currency = mapped.currency || 'USD';
+          mapped.updatedAt = todayStr();
+          rows.push(mapped);
+        });
+        if (!rows.length) { status.textContent = '업로드 실패 — 유효한 행이 없습니다. 열 이름(품목/단가/통화/비고)을 확인하세요.'; return; }
+        var existing = S.list('priceItems').filter(function (p) { return p.category === priceCategory; });
+        rows.forEach(function (r) {
+          var dup = existing.find(function (x) { return x.itemName === r.itemName; });
+          S.save('priceItems', { id: dup ? dup.id : undefined, category: r.category, itemName: r.itemName, unitPrice: r.unitPrice, currency: r.currency, note: r.note || '', updatedAt: r.updatedAt });
+        });
+        status.textContent = rows.length + '건 반영했습니다.';
+        renderPrices();
+      } catch (err) {
+        status.textContent = '엑셀을 읽는 중 오류가 발생했습니다: ' + err.message;
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function renderPrices() {
+    syncPriceSeg();
+    var links = S.list('teamsLinks')[0] || {};
+    $('#priceTeamsLink').value = links[priceCategory] || '';
+    var openBtn = $('#priceTeamsOpenBtn');
+    if (links[priceCategory]) { openBtn.href = links[priceCategory]; openBtn.classList.remove('disabled'); openBtn.removeAttribute('aria-disabled'); }
+    else { openBtn.href = '#'; openBtn.classList.add('disabled'); openBtn.setAttribute('aria-disabled', 'true'); }
+
+    var tbody = $('#priceTable tbody');
+    tbody.innerHTML = '';
+    var items = S.list('priceItems').filter(function (p) { return p.category === priceCategory; });
+    items.forEach(function (p) {
+      var tr = el('tr');
+      tr.appendChild(el('td', { text: p.itemName }));
+      tr.appendChild(el('td', { class: 'num', text: L.fmt(p.unitPrice) }));
+      tr.appendChild(el('td', { text: p.currency }));
+      tr.appendChild(el('td', { class: 'wrap-cell', text: p.note || '' }));
+      tr.appendChild(el('td', { text: p.updatedAt }));
+      tr.appendChild(el('td', {}, [el('button', {
+        class: 'link-btn danger', text: '삭제',
+        onclick: function () { if (confirm(p.itemName + ' 항목을 삭제할까요?')) { S.remove('priceItems', p.id); renderPrices(); } }
+      })]));
+      tbody.appendChild(tr);
+    });
+    if (!items.length) tbody.appendChild(el('tr', {}, [el('td', { colspan: '6', text: '업로드된 가격이 없습니다.' })]));
   }
 
   /**

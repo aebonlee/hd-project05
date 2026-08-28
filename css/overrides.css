@@ -29,3 +29,35 @@ body.hd.hd-app > header.topbar {
 
 /* 왼쪽 메뉴가 열렸을 때 본문 위에 오도록 (좁은 화면) */
 .hd.hd-app .side-nav { z-index: 35; }
+
+/* ── 팀 포털 2차 개편 (pptx 7슬라이드) 추가 스타일 ──────────────────── */
+
+/* 주간업무 월별 탭 (슬라이드1) */
+.month-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+.month-tab {
+  border: 1px solid var(--hd-line, #d5dde7); background: #fff; border-radius: 999px;
+  padding: 5px 14px; font-size: 12.5px; cursor: pointer; font-family: inherit; color: var(--hd-ink-2, #475569);
+}
+.month-tab.active { background: var(--navy); border-color: var(--navy); color: #fff; }
+
+/* 사이드바 미니 알림 위젯 (슬라이드1 — 매주 월 14시 클릭 한 번) */
+.notify-mini {
+  margin: 10px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--hd-surface-2, #f8fafc);
+}
+.notify-mini-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.notify-mini-when { font-size: 14px; font-weight: 700; color: var(--navy); margin: 3px 0 8px; }
+.notify-mini .btn { width: 100%; }
+
+/* 회의 등록 — 세로형 컴팩트 (슬라이드4) */
+.form-compact label { margin-bottom: 8px; }
+.form-compact input, .form-compact select, .form-compact textarea { padding: 6px 8px; }
+.notify-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+#meetingNoteSelect.notewide { width: 100%; margin-bottom: 8px; }
+#meetingNoteText { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 7px; font-family: inherit; font-size: 13px; resize: vertical; }
+
+/* 오일·브레이커 가격 — 팀즈 링크 버튼 비활성 상태 (슬라이드7) */
+#priceTeamsOpenBtn.disabled { opacity: .45; pointer-events: none; }
+
+/* SAP 매출 차트 — 지역별 매출추이 카드 안에 두 개가 나란히 들어가므로 기본보다 낮게 */
+.chart-box.small { height: 220px; }
+@media (max-width: 720px) { .chart-box.small { height: 200px; } }

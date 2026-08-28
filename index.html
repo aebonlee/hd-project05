@@ -45,20 +45,28 @@
   <div class="user-box">
     <label for="userSelect" class="sr-only">사용자 선택</label>
     <select id="userSelect" title="데모 로그인: 사용자 선택"></select>
-    <span id="userRole" class="role-badge"></span>
+    <!-- 상단 "책임자/팀원" 배지는 요청에 따라 표시하지 않는다 (슬라이드1 #2) — 요소는 남겨 로직 재사용, 화면에서만 숨김 -->
+    <span id="userRole" class="role-badge" hidden></span>
   </div>
 </header>
 
 <div class="layout">
+  <!-- 메뉴 순서: 주간업무 → 지역별매출추이 → 환율공지 → 경과채권 → 오일·브레이커 가격 → 출장일정 → 팀회의일정 (슬라이드1 요청 순서) -->
   <nav id="sideNav" class="side-nav" aria-label="주요 기능">
     <a href="#/weekly"     class="nav-item" data-view="weekly"><span class="nav-ico">📝</span>주간업무 <span class="stage-tag s1">1단계</span></a>
-    <a href="#/receivable" class="nav-item" data-view="receivable"><span class="nav-ico">📁</span>경과채권 바로가기 <span class="stage-tag s1">1단계</span></a>
+    <a href="#/sales"      class="nav-item" data-view="sales"><span class="nav-ico">📈</span>지역별 매출 추이 <span class="stage-tag s3">3단계</span></a>
+    <a href="#/fx"         class="nav-item" data-view="fx"><span class="nav-ico">💱</span>환율 공지 <span class="stage-tag s2">2단계</span></a>
+    <a href="#/receivable" class="nav-item" data-view="receivable"><span class="nav-ico">📁</span>경과채권 <span class="stage-tag s1">1단계</span></a>
+    <a href="#/prices"     class="nav-item" data-view="prices"><span class="nav-ico">🛢️</span>오일·브레이커 가격 <span class="stage-tag s2">2단계</span></a>
     <a href="#/trips"      class="nav-item" data-view="trips"><span class="nav-ico">✈️</span>출장 일정 <span class="stage-tag s2">2단계</span></a>
     <a href="#/meetings"   class="nav-item" data-view="meetings"><span class="nav-ico">👥</span>팀회의 일정 <span class="stage-tag s2">2단계</span></a>
-    <a href="#/fx"         class="nav-item" data-view="fx"><span class="nav-ico">💱</span>환율 공지 <span class="stage-tag s2">2단계</span></a>
-    <a href="#/sales"      class="nav-item" data-view="sales"><span class="nav-ico">📈</span>지역별 매출 추이 <span class="stage-tag s3">3단계</span></a>
     <a href="#/dealers"    class="nav-item" data-view="dealers"><span class="nav-ico">🤝</span>딜러 대시보드 <span class="stage-tag s3">3단계</span></a>
     <a href="parts-sales-dashboard.html" class="nav-item"><span class="nav-ico">🔧</span>Parts Sales 대시보드 <span class="stage-tag s3">3단계</span></a>
+    <div id="notifyMini" class="notify-mini">
+      <div class="notify-mini-title">다음 주간알림</div>
+      <div id="notifyMiniWhen" class="notify-mini-when">–</div>
+      <button type="button" id="notifyMiniBtn" class="btn btn-primary btn-sm">지금 발송</button>
+    </div>
     <div class="nav-footer">
       <button id="exportJsonBtn" class="btn btn-ghost btn-sm">데이터 내보내기 (JSON)</button>
       <button id="importJsonBtn" class="btn btn-ghost btn-sm">데이터 가져오기 (JSON)</button>
@@ -73,6 +81,9 @@
     <section id="view-weekly" class="view" hidden>
       <h1>주간업무 작성 <small class="stage s1">1단계</small></h1>
       <p class="view-desc">매주 메일 공지를 대체합니다. 작성 후 [알림 발송]으로 팀에 공유하세요.</p>
+
+      <!-- 월별 탭: 그 달의 주간업무만 모아 보기/저장 (슬라이드1) -->
+      <div id="weeklyMonthTabs" class="month-tabs" role="tablist" aria-label="월별 보기"></div>
 
       <div class="grid-2">
         <div class="card">
@@ -142,8 +153,23 @@
 
     <!-- ============ B-2 경과채권 바로가기 (1단계) ============ -->
     <section id="view-receivable" class="view" hidden>
-      <h1>경과채권 바로가기 <small class="stage s1">1단계</small></h1>
-      <p class="view-desc">'Efam' 공유 폴더를 뒤지지 않고 한 번에 이동합니다. URL은 새 탭으로 열리고, 사내 서버 경로(\\efam\…)는 [경로 복사] 후 탐색기 주소창에 붙여넣으세요.</p>
+      <h1>경과채권 <small class="stage s1">1단계</small></h1>
+      <p class="view-desc">Efam 접속이 필요한 경과채권 엑셀을 업로드하면 표로 바로 봅니다. 담당자별 지연 사유·해결 방법을 그 자리에서 적어 공유하세요.</p>
+
+      <div class="card">
+        <div class="card-head wrap">
+          <h2>경과채권 엑셀 업로드</h2>
+          <label class="btn btn-primary btn-sm file-btn">엑셀 업로드
+            <input type="file" id="receivableUpload" accept=".xlsx,.xls" hidden>
+          </label>
+        </div>
+        <p class="hint">열 이름: Dealer code, Dealer Name, OD, 담당자 (헤더가 다르면 순서대로 인식합니다). 업로드분은 누적되며 같은 Dealer code는 갱신됩니다.</p>
+        <p id="receivableUploadStatus" class="hint"></p>
+        <div class="table-wrap"><table id="receivableRowsTable" class="table">
+          <thead><tr><th>Dealer code</th><th>Dealer Name</th><th>OD</th><th>담당자</th><th>지연 사유</th><th>해결 방법</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
 
       <div class="card">
         <div class="card-head">
@@ -232,24 +258,36 @@
       <div class="grid-2">
         <div class="card">
           <h2 id="mtFormTitle">회의 등록</h2>
-          <form id="meetingForm" class="form">
+          <form id="meetingForm" class="form form-compact">
             <input type="hidden" id="mfId">
-            <div class="form-row">
-              <label>일시 <input type="datetime-local" id="mfWhen" required></label>
-              <label>장소/링크 <input type="text" id="mfPlace" required placeholder="회의실 또는 화상회의 링크"></label>
-            </div>
+            <label>일시 <input type="datetime-local" id="mfWhen" required></label>
+            <label>장소/링크 <input type="text" id="mfPlace" required placeholder="회의실 또는 화상회의 링크"></label>
             <label>안건 <textarea id="mfAgenda" rows="2" required></textarea></label>
-            <label>참석자 <input type="text" id="mfAttendees" required placeholder="예: 전원 / 최율아, 김도현"></label>
+            <label>참석자
+              <input type="text" id="mfAttendees" required placeholder="예: 전원 / 최율아, 김도현" list="assigneeList">
+            </label>
+            <datalist id="assigneeList"></datalist>
             <div class="form-actions">
               <button type="submit" class="btn btn-primary">저장</button>
               <button type="button" class="btn btn-ghost" id="mfCancelBtn" hidden>수정 취소</button>
             </div>
           </form>
+          <div class="notify-row">
+            <button type="button" class="btn btn-primary btn-sm" id="meetingNotifyBtn">클릭으로 알림발송</button>
+            <span class="hint">등록된 회의를 참석자에게 메일 초안으로 공지합니다.</span>
+          </div>
         </div>
         <div class="card">
-          <h2>다가오는 회의</h2>
-          <ul id="upcomingMeetings" class="meeting-list"></ul>
-          <h2>지난 회의</h2>
+          <h2>회의 노트란</h2>
+          <p class="hint">회의를 선택해 노트를 남기세요. 🎤 녹음 버튼으로 브라우저 음성인식(오프라인 불가·Chrome/Edge 권장) 결과가 노트에 그대로 추가됩니다.</p>
+          <select id="meetingNoteSelect" class="notewide"></select>
+          <textarea id="meetingNoteText" rows="6" placeholder="회의 노트를 입력하거나 마이크로 받아쓰세요."></textarea>
+          <div class="form-actions">
+            <button type="button" class="btn btn-ghost btn-sm" id="meetingMicBtn">🎤 녹음 시작</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="meetingAiSummaryBtn" disabled title="API 키 협의 후 2단계에서 연동 예정">✨ AI 요약 (2단계 예정)</button>
+            <button type="button" class="btn btn-primary btn-sm" id="meetingNoteSaveBtn">노트 저장</button>
+          </div>
+          <h3>지난 회의</h3>
           <ul id="pastMeetings" class="meeting-list past"></ul>
         </div>
       </div>
@@ -269,6 +307,15 @@
               <label>통화
                 <select id="fxCurrency">
                   <option>USD</option><option>EUR</option><option>JPY</option><option>CNY</option><option>GBP</option>
+                  <option>VND</option><option>THB</option><option>IDR</option><option>MXN</option><option>BRL</option>
+                  <option>ZAR</option><option>CLP</option><option>AED</option>
+                </select>
+              </label>
+              <label>분류
+                <select id="fxCategory">
+                  <option value="기준통화">기준통화</option>
+                  <option value="딜러통화">딜러통화</option>
+                  <option value="기타">기타</option>
                 </select>
               </label>
               <label>환율 (KRW) <input type="text" id="fxRate" required placeholder="예: 1,385.50"></label>
@@ -278,7 +325,7 @@
           </form>
           <h3 id="fxCurrentTitle">이번 달 고시 환율</h3>
           <div class="table-wrap"><table id="fxCurrentTable" class="table">
-            <thead><tr><th>통화</th><th>환율(KRW)</th><th>입력자</th><th>입력일</th></tr></thead>
+            <thead><tr><th>통화</th><th>분류</th><th>환율(KRW)</th><th>입력자</th><th>입력일</th></tr></thead>
             <tbody></tbody>
           </table></div>
         </div>
@@ -296,9 +343,31 @@
       <h1>지역별 매출 추이 <small class="stage s3">3단계</small></h1>
       <p class="view-desc">주간업무에 입력된 주간 매출이 지역/법인별로 자동 집계됩니다. (단위: USD 천불)</p>
 
+      <!-- SAP 매출 업로드 — 국가별 원본 데이터. 직수출/법인 그래프를 별도로 그린다 (슬라이드6) -->
+      <div class="card">
+        <div class="card-head wrap">
+          <h2>SAP 매출 업로드 (국가별)</h2>
+          <label class="btn btn-primary btn-sm file-btn">엑셀 업로드
+            <input type="file" id="sapUpload" accept=".xlsx,.xls" hidden>
+          </label>
+        </div>
+        <p class="hint">열 이름: 국가, 구분(법인/직수출), 기준월(YYYY-MM), 매출(USD 천불). 직수출은 국가로 지역(아시아·중동·아프리카·CIS·대양주·중남미·CNHI)을 자동 판정합니다.</p>
+        <p id="sapUploadStatus" class="hint"></p>
+        <div class="grid-2">
+          <div>
+            <h3>법인 매출 (국가별 합산)</h3>
+            <div class="chart-box small"><canvas id="sapCorpChart"></canvas></div>
+          </div>
+          <div>
+            <h3>직수출 매출 (지역별)</h3>
+            <div class="chart-box small"><canvas id="sapExportChart"></canvas></div>
+          </div>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-head">
-          <h2>매출 그래프</h2>
+          <h2>매출 그래프 <small class="hint">(주간업무 기준)</small></h2>
           <div class="filters">
             <div class="seg" role="group" aria-label="집계 단위">
               <button class="seg-btn active" id="salesWeekBtn">주간</button>
@@ -352,12 +421,48 @@
       </div>
     </section>
 
+    <!-- ============ 오일·브레이커 가격 (2단계, 슬라이드7) ============ -->
+    <section id="view-prices" class="view" hidden>
+      <h1>오일·브레이커 가격 <small class="stage s2">2단계</small></h1>
+      <p class="view-desc">분기/월 단위로 갱신되는 오일·브레이커 가격을 엑셀로 올리면 표로 보여줍니다. 표를 클릭하면 팀즈 공유 폴더로 이동합니다.</p>
+
+      <div class="card">
+        <div class="seg" role="group" aria-label="가격 구분">
+          <button class="seg-btn active" id="priceOilBtn">오일 가격</button>
+          <button class="seg-btn" id="priceBreakerBtn">브레이커 가격</button>
+        </div>
+
+        <div class="card-head wrap">
+          <h2 id="priceListTitle">오일 가격 목록</h2>
+          <label class="btn btn-primary btn-sm file-btn">엑셀 업로드
+            <input type="file" id="priceUpload" accept=".xlsx,.xls" hidden>
+          </label>
+        </div>
+        <p class="hint">열 이름: 품목, 단가, 통화, 비고. 업로드 시 같은 구분(오일/브레이커) 데이터를 갱신합니다.</p>
+        <p id="priceUploadStatus" class="hint"></p>
+
+        <div class="form-row">
+          <label>팀즈 공유 폴더 링크
+            <input type="url" id="priceTeamsLink" placeholder="https://teams.microsoft.com/l/... (미입력 시 이동 버튼 비활성)">
+          </label>
+          <button type="button" class="btn btn-ghost btn-sm" id="priceTeamsSaveBtn">링크 저장</button>
+          <a id="priceTeamsOpenBtn" class="btn btn-ghost btn-sm" href="#" target="_blank" rel="noopener">📁 팀즈 폴더로 이동</a>
+        </div>
+
+        <div class="table-wrap"><table id="priceTable" class="table">
+          <thead><tr><th>품목</th><th>단가</th><th>통화</th><th>비고</th><th>갱신일</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+    </section>
+
   </main>
 </div>
 
 <div id="toast" class="toast" hidden></div>
 
 <script src="js/seed.js"></script>
+<script src="js/assignees.js"></script>
 <script src="js/logic.js"></script>
 <script src="js/store.js"></script>
 <script src="js/config.js"></script>

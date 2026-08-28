@@ -196,4 +196,36 @@ ok('validateBackup: 형식/버전 오류 거부', () => {
   assert.strictEqual(Store.importAll({ app: 'hd-portal', version: 1, collections: { users: '배열아님' } }).ok, false);
 });
 
+console.log('[SAP 매출 — 법인/직수출 분리 (슬라이드6)]');
+ok('exportSubregion: 국가→지역 매핑', () => {
+  assert.strictEqual(L.exportSubregion('UAE'), '중동');
+  assert.strictEqual(L.exportSubregion('터키'), '중동');
+  assert.strictEqual(L.exportSubregion('러시아'), 'CIS');
+  assert.strictEqual(L.exportSubregion('칠레'), '중남미');
+  assert.strictEqual(L.exportSubregion('모르는나라'), '기타');
+});
+ok('validateSapRow: 정상/오류 행', () => {
+  const okRow = L.validateSapRow({ country: 'UAE', kind: '직수출', month: '2026-08', sales: '120' });
+  assert.strictEqual(okRow.ok, true);
+  assert.strictEqual(okRow.row.sales, 120);
+  assert.strictEqual(L.validateSapRow({ country: '', kind: '직수출', month: '2026-08', sales: 1 }).ok, false);
+  assert.strictEqual(L.validateSapRow({ country: '한국', kind: '기타구분', month: '2026-08', sales: 1 }).ok, false);
+  assert.strictEqual(L.validateSapRow({ country: '한국', kind: '법인', month: '2026-13', sales: 1 }).ok, false);
+  assert.strictEqual(L.validateSapRow({ country: '한국', kind: '법인', month: '2026-08', sales: -1 }).ok, false);
+});
+ok('aggregateSapSales: 법인은 월별 합산, 직수출은 지역별로 나뉜다', () => {
+  const rows = [
+    { country: '독일', kind: '법인', month: '2026-07', sales: 100 },
+    { country: '미국', kind: '법인', month: '2026-07', sales: 50 },
+    { country: 'UAE', kind: '직수출', month: '2026-07', sales: 30 },
+    { country: '칠레', kind: '직수출', month: '2026-07', sales: 20 },
+    { country: 'UAE', kind: '직수출', month: '2026-08', sales: 40 }
+  ];
+  const agg = L.aggregateSapSales(rows);
+  assert.deepStrictEqual(agg.labels, ['2026-07', '2026-08']);
+  assert.deepStrictEqual(agg.corp, [150, 0]);
+  assert.deepStrictEqual(agg.exportSeries['중동'], [30, 40]);
+  assert.deepStrictEqual(agg.exportSeries['중남미'], [20, 0]);
+});
+
 console.log('\n총 ' + count + '개 테스트 통과');

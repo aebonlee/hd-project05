@@ -174,6 +174,76 @@
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(str).trim());
   }
 
+  /* ---------------- 직수출 국가 → 지역 그룹 (슬라이드6) ---------------- */
+
+  var EXPORT_SUBREGION_MAP = {
+    // 아시아
+    '베트남': '아시아', '태국': '아시아', '인도네시아': '아시아', '인도': '아시아', '필리핀': '아시아', '말레이시아': '아시아',
+    // 중동 (터키·이스라엘 포함)
+    'UAE': '중동', '사우디': '중동', '사우디아라비아': '중동', '터키': '중동', '이스라엘': '중동', '카타르': '중동', '쿠웨이트': '중동',
+    // 아프리카
+    '남아공': '아프리카', '이집트': '아프리카', '나이지리아': '아프리카', '케냐': '아프리카',
+    // CIS (러시아 포함)
+    '러시아': 'CIS', '카자흐스탄': 'CIS', '우즈베키스탄': 'CIS',
+    // 대양주
+    '호주': '대양주', '뉴질랜드': '대양주',
+    // 중남미
+    '칠레': '중남미', '페루': '중남미', '콜롬비아': '중남미', '아르헨티나': '중남미', '에콰도르': '중남미',
+    // CNHI(그룹 협업 판매망 — 국가가 아니라 채널 구분으로 오는 경우가 있어 별도 인식)
+    'CNHI': 'CNHI'
+  };
+
+  /** 국가명 → 직수출 지역 그룹. 매핑에 없으면 '기타' */
+  function exportSubregion(country) {
+    var key = String(country || '').trim();
+    return EXPORT_SUBREGION_MAP[key] || '기타';
+  }
+
+  /**
+   * SAP 매출 원본(rows: {country, kind:'법인'|'직수출', month, sales}) → 두 집계
+   * 법인: 국가 무관 월별 합산 하나의 시리즈.
+   * 직수출: exportSubregion 으로 묶어 지역별 시리즈.
+   */
+  function aggregateSapSales(rows) {
+    var months = {};
+    var corpByMonth = {};
+    var exportByRegion = {}; // region -> {month: sum}
+
+    (rows || []).forEach(function (r) {
+      var m = r.month;
+      if (!m) return;
+      months[m] = true;
+      var v = Number(r.sales) || 0;
+      if (r.kind === '법인') {
+        corpByMonth[m] = (corpByMonth[m] || 0) + v;
+      } else {
+        var region = exportSubregion(r.country);
+        if (!exportByRegion[region]) exportByRegion[region] = {};
+        exportByRegion[region][m] = (exportByRegion[region][m] || 0) + v;
+      }
+    });
+
+    var labels = Object.keys(months).sort();
+    var corp = labels.map(function (m) { return corpByMonth[m] || 0; });
+    var exportSeries = {};
+    Object.keys(exportByRegion).sort().forEach(function (region) {
+      exportSeries[region] = labels.map(function (m) { return exportByRegion[region][m] || 0; });
+    });
+
+    return { labels: labels, corp: corp, exportSeries: exportSeries };
+  }
+
+  /** SAP 업로드 행 검증. { ok, row?, error? } */
+  function validateSapRow(row) {
+    if (!row || !String(row.country || '').trim()) return { ok: false, error: '국가 누락' };
+    var kind = String(row.kind || '').trim();
+    if (kind !== '법인' && kind !== '직수출') return { ok: false, error: '구분은 "법인" 또는 "직수출"이어야 함: ' + row.kind };
+    if (!validateMonth(row.month)) return { ok: false, error: '기준월 형식 오류(YYYY-MM): ' + row.month };
+    var v = Number(row.sales);
+    if (isNaN(v) || v < 0) return { ok: false, error: '매출 숫자 오류: ' + row.sales };
+    return { ok: true, row: { country: String(row.country).trim(), kind: kind, month: row.month, sales: v } };
+  }
+
   return {
     isoWeekOf: isoWeekOf,
     weekLabel: weekLabel,
@@ -190,6 +260,9 @@
     mergeMetrics: mergeMetrics,
     fmt: fmt,
     buildMailto: buildMailto,
-    isEmail: isEmail
+    isEmail: isEmail,
+    exportSubregion: exportSubregion,
+    aggregateSapSales: aggregateSapSales,
+    validateSapRow: validateSapRow
   };
 });
