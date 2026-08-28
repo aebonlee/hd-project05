@@ -239,9 +239,25 @@
         .footer { text-align: center; font-size: 11px; color: #bbb; padding: 22px 0 36px; line-height: 1.8; }
 
         @media (max-width: 1300px) {
-            .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+            .kpi-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
             .two-col  { grid-template-columns: 1fr; }
-            .dealer-kpi-row { grid-template-columns: repeat(2, 1fr); }
+            .dealer-kpi-row { grid-template-columns: repeat(2, minmax(0,1fr)); }
+        }
+
+        .region-stat-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; margin-bottom: 18px; }
+
+        /* 좁은 화면 — 반응형은 항상 파일 맨 끝, 위 규칙을 이 순서로 덮어써야 이긴다 */
+        @media (max-width: 640px) {
+            .back-link, .header, .tab-nav, .main { padding-left: 16px; padding-right: 16px; }
+            .tab-nav { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            .tab-btn { padding: 12px 16px; }
+            .kpi-grid,
+            .three-col,
+            .dealer-kpi-row,
+            .key-items-row,
+            .region-stat-grid { grid-template-columns: minmax(0,1fr); }
+            .two-col { grid-template-columns: 1fr; }
+            .d-tab { min-width: 0; flex: 1 1 90px; }
         }
     </style>
 </head>
@@ -792,7 +808,7 @@ function renderTab2() {
                 </div>
                 <span class="region-badge-ca">CA</span>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:18px;">
+            <div class="region-stat-grid">
                 ${statBox('YTD Actual', fmtUSD(caS.ytd), '#1a6fc4')}
                 ${statBox('2026 AOP',   fmtUSD(caS.aop), '#333')}
                 ${statBox('Achievement', caS.aop>0?(caS.ytd/caS.aop*100).toFixed(0)+'%':'—', achBgColor(caS.aop>0?caS.ytd/caS.aop*100:0))}
@@ -808,7 +824,7 @@ function renderTab2() {
                 </div>
                 <span class="region-badge-carib">CARIB</span>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:18px;">
+            <div class="region-stat-grid">
                 ${statBox('YTD Actual', fmtUSD(crS.ytd), '#27ae60')}
                 ${statBox('2026 AOP',   crS.aop>0?fmtUSD(crS.aop):'No Target', '#333')}
                 ${statBox('Achievement', crS.aop>0?(crS.ytd/crS.aop*100).toFixed(0)+'%':'N/A', '#aaa')}
